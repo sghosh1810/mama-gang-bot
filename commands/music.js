@@ -2,6 +2,8 @@ const Discord = require("discord.js");
 const client = new Discord.Client();
 const ytdl = require("ytdl-core");
 const queue = new Map();
+const axios = require("axios");
+
 module.exports = {
     name: "music",
     description: "Music bot",
@@ -21,9 +23,8 @@ module.exports = {
         } else {
             message.channel.send("You need to enter a valid command!");
         }
-        async function execute(message, serverQueue) {
+        async function execute(message, serverQueue, retry = 0) {
             const args = message.content.split(" ");
-
             const voiceChannel = message.member.voice.channel;
             if (!voiceChannel) return message.channel.send("You need to be in a voice channel to play music!");
             const permissions = voiceChannel.permissionsFor(message.client.user);
@@ -31,38 +32,58 @@ module.exports = {
                 return message.channel.send("I need the permissions to join and speak in your voice channel!");
             }
             console.log(args);
-            const songInfo = await ytdl.getInfo(args[2]);
-            const song = {
-                title: songInfo.videoDetails.title,
-                url: songInfo.videoDetails.video_url,
-            };
-
-            if (!serverQueue) {
-                const queueContruct = {
-                    textChannel: message.channel,
-                    voiceChannel: voiceChannel,
-                    connection: null,
-                    songs: [],
-                    volume: 5,
-                    playing: true,
+            try {
+                const songInfo = await ytdl.getInfo(args[2]);
+                const song = {
+                    title: songInfo.videoDetails.title,
+                    url: songInfo.videoDetails.video_url,
                 };
 
-                queue.set(message.guild.id, queueContruct);
+                if (!serverQueue) {
+                    const queueContruct = {
+                        textChannel: message.channel,
+                        voiceChannel: voiceChannel,
+                        connection: null,
+                        songs: [],
+                        volume: 5,
+                        playing: true,
+                    };
 
-                queueContruct.songs.push(song);
+                    queue.set(message.guild.id, queueContruct);
 
-                try {
-                    var connection = await voiceChannel.join();
-                    queueContruct.connection = connection;
-                    play(message.guild, queueContruct.songs[0]);
-                } catch (err) {
-                    console.log(err);
-                    queue.delete(message.guild.id);
-                    return message.channel.send(err);
+                    queueContruct.songs.push(song);
+
+                    try {
+                        var connection = await voiceChannel.join();
+                        queueContruct.connection = connection;
+                        play(message.guild, queueContruct.songs[0]);
+                    } catch (err) {
+                        console.log(err);
+                        queue.delete(message.guild.id);
+                        return message.channel.send(err);
+                    }
+                } else {
+                    serverQueue.songs.push(song);
+                    return message.channel.send(`${song.title} has been added to the queue!`);
                 }
-            } else {
-                serverQueue.songs.push(song);
-                return message.channel.send(`${song.title} has been added to the queue!`);
+            } catch (e) {
+                if (retry > 0) {
+                    return;
+                }
+                var config = {
+                    method: "get",
+                    url: `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&q=${args.slice(2, args.length).join(" ")}&type=video&key=${process.env.YT_API_KEY}`,
+                    headers: {},
+                };
+                // console.log(config.url);
+                axios(config)
+                    .then(function (response) {
+                        message.content = `${prefix} play https://www.youtube.com/watch?v=${response.data.items[0].id.videoId}`;
+                        execute(message, serverQueue, ++retry);
+                    })
+                    .catch(function (error) {
+                        console.log(error);
+                    });
             }
         }
 

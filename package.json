@@ -13,6 +13,7 @@
   "dependencies": {
     "@discordjs/opus": "^0.7.0",
     "@sentry/node": "^5.18.0",
+    "axios": "^0.25.0",
     "dabi-images": "^2.7.5",
     "discord.js": "^12.5.3",
     "dotenv": "^8.2.0",
